@@ -34,7 +34,7 @@
 </head>
 <body class="text-rock-800">
     <div id="app" class="min-h-screen">
-
+        
         <div class="mx-auto min-h-screen bg-white shadow-2xl relative max-w-[640px] md:border-x md:border-rock-200">
 
             <div v-if="!session" class="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-white to-rock-50 p-8">
@@ -44,7 +44,7 @@
                             <i class="fas fa-cube text-white text-2xl"></i>
                         </div>
                         <h1 class="text-2xl font-bold text-rock-900">微岩石 CRM</h1>
-                        <p class="text-gray-400 text-xs mt-2">v1.4 智能增强版</p>
+                        <p class="text-gray-400 text-xs mt-2">v1.5 体验修正版</p>
                     </div>
                     <div class="space-y-5">
                         <input v-model="loginForm.email" type="email" placeholder="邮箱账号" class="w-full px-4 py-3.5 bg-white border border-gray-200 rounded-xl focus:border-rock-900 outline-none transition">
@@ -97,7 +97,7 @@
                             <span class="text-[10px] text-red-400 font-medium">需跟进</span>
                         </div>
                     </div>
-
+                    
                     <div v-if="vipCustomers.length > 0 && !searchQuery">
                         <div @click="isVipExpanded = !isVipExpanded" class="flex items-center justify-between mb-3 cursor-pointer">
                             <div class="flex items-center">
@@ -124,7 +124,7 @@
                         <div class="flex items-center justify-between mb-4">
                             <span class="text-sm font-bold text-gray-800">客户名单</span>
                         </div>
-
+                        
                         <div class="bg-gray-100 p-1 rounded-xl flex mb-4 overflow-x-auto hide-scrollbar">
                             <template v-if="viewMode === 'status'">
                                 <button v-for="tab in statusTabs" :key="tab" @click="currentTab = tab; resetPagination()" 
@@ -200,7 +200,7 @@
 
             <div v-else-if="currentView === 'trash'" class="bg-white min-h-screen">
                 <div class="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center z-10">
-                    <button @click="currentView = 'dashboard'" class="text-gray-500 hover:text-black transition"><i class="fas fa-arrow-left"></i></button>
+                    <button @click="restoreScroll" class="text-gray-500 hover:text-black transition"><i class="fas fa-arrow-left"></i> 返回</button>
                     <div class="ml-4 font-bold text-lg">回收站</div>
                 </div>
                 <div class="p-5 space-y-3">
@@ -215,11 +215,11 @@
             <transition name="slide-up">
             <div v-if="currentView === 'form'" class="fixed inset-0 z-50 bg-white flex flex-col">
                 <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0 z-10">
-                    <button @click="currentView = 'dashboard'" class="text-sm font-medium text-gray-500">取消</button>
+                    <button @click="closeForm" class="text-sm font-medium text-gray-500">取消</button>
                     <div class="font-bold text-gray-900">{{ isEditing ? '编辑资料' : '新增客户' }}</div>
                     <button @click="saveCustomer" class="text-sm font-bold text-white bg-rock-900 px-4 py-1.5 rounded-lg shadow-md">保存</button>
                 </div>
-
+                
                 <div class="flex-1 overflow-y-auto p-6 space-y-8 bg-white pb-20">
                     <section class="space-y-4">
                         <label class="block text-xs font-bold text-gray-400">客户姓名</label>
@@ -324,6 +324,7 @@
                     levelTabs: ['重点跟进', '培养', '意向不大'],
                     pageSize: 10, currentPage: 1,
                     customers: [], isEditing: false, formData: {},
+                    savedScrollTop: 0, // 新增：用于记忆滚动位置
                     provinceOptions: ["广东", "上海", "北京", "浙江", "江苏", "四川", "福建", "山东", "湖北", "湖南", "河南", "河北", "重庆", "陕西", "天津", "江西", "广西", "安徽", "海外", "其他"],
                     sourceOptions: ["小红书", "抖音", "闲鱼", "朋友介绍", "展会", "官网", "陌拜", "老客户推荐", "设计师渠道"]
                 }
@@ -368,6 +369,39 @@
             methods: {
                 loadMore() { this.currentPage++; },
                 resetPagination() { this.currentPage = 1; },
+                
+                // --- 核心修复：滚动位置记忆与恢复 ---
+                // 保存位置并打开详情
+                openCustomer(c) { 
+                    this.savedScrollTop = window.scrollY; // 记下当前位置
+                    this.isEditing = true; 
+                    this.formData = { ...c }; 
+                    this.currentView = 'form'; 
+                },
+                openAddForm() {
+                    this.savedScrollTop = window.scrollY; // 记下当前位置
+                    this.isEditing = false;
+                    const isHeng = this.currentUserEmail.includes('158402600');
+                    this.formData = { status: '持续跟进', level: '培养', country: '中国', handler: isHeng ? '亨' : '志鹏', next_followup_date: new Date().toISOString().split('T')[0], province: '', source: '' };
+                    this.currentView = 'form';
+                },
+                // 关闭详情并恢复位置
+                closeForm() {
+                    this.currentView = 'dashboard';
+                    // 使用 nextTick 等待界面渲染完成后再滚动
+                    this.$nextTick(() => {
+                        window.scrollTo(0, this.savedScrollTop);
+                    });
+                },
+                // 回收站返回也恢复
+                restoreScroll() {
+                    this.currentView = 'dashboard';
+                    this.$nextTick(() => {
+                        window.scrollTo(0, this.savedScrollTop); // 如果之前有记过，或者置顶
+                    });
+                },
+                // --------------------------------
+
                 async handleLogin() {
                     this.loading = true; this.loginError = '';
                     const { data, error } = await _supabase.auth.signInWithPassword({ email: this.loginForm.email, password: this.loginForm.password });
@@ -386,13 +420,7 @@
                     if (error) alert("获取数据失败: " + error.message);
                     else this.customers = data;
                 },
-                openAddForm() {
-                    this.isEditing = false;
-                    const isHeng = this.currentUserEmail.includes('158402600');
-                    this.formData = { status: '持续跟进', level: '培养', country: '中国', handler: isHeng ? '亨' : '志鹏', next_followup_date: new Date().toISOString().split('T')[0], province: '', source: '' };
-                    this.currentView = 'form';
-                },
-                openCustomer(c) { this.isEditing = true; this.formData = { ...c }; this.currentView = 'form'; },
+                
                 async saveCustomer() {
                     if (!this.formData.name) return alert('请输入客户姓名');
                     const payload = { ...this.formData };
@@ -400,12 +428,18 @@
                     if (this.isEditing) payload.id = this.formData.id;
                     const { data, error } = await _supabase.from('customers').upsert(payload).select();
                     if (error) alert('保存失败:' + error.message);
-                    else { await this.fetchCustomers(); this.currentView = 'dashboard'; }
+                    else { 
+                        await this.fetchCustomers(); 
+                        this.closeForm(); // 使用 closeForm 来恢复位置
+                    }
                 },
                 async deleteCustomer() {
                     if(!confirm('确定要删除放入回收站吗？')) return;
                     const { error } = await _supabase.from('customers').update({ is_deleted: true }).eq('id', this.formData.id);
-                    if (!error) { this.fetchCustomers(); this.currentView = 'dashboard'; }
+                    if (!error) { 
+                        this.fetchCustomers(); 
+                        this.closeForm(); // 使用 closeForm 来恢复位置
+                    }
                 },
                 async restoreCustomer(c) {
                     if(!confirm('确定要恢复这位客户吗？')) return;
@@ -432,7 +466,7 @@
                     const today = new Date();
                     const diffTime = Math.abs(today - lastDate);
                     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
-                    return diffDays > 30; // 超过30天算沉睡
+                    return diffDays > 30; 
                 },
                 formatDate(dateStr) {
                     if (!dateStr) return '';
