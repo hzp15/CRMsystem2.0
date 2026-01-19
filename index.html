@@ -1,0 +1,452 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>微岩石 CRM</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'sans-serif'] },
+                    colors: {
+                        rock: { 50: '#fafaf9', 100: '#f5f5f4', 200: '#e7e5e4', 800: '#292524', 900: '#1c1917' },
+                        gold: { 500: '#d97706', 50: '#fffbeb' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { background-color: #f0f2f5; font-family: 'Inter', sans-serif; -webkit-tap-highlight-color: transparent; }
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .fade-enter-active, .fade-leave-active { transition: opacity 0.2s ease; }
+        .fade-enter-from, .fade-leave-to { opacity: 0; }
+        .slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s ease; }
+        .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); }
+    </style>
+</head>
+<body class="text-rock-800">
+    <div id="app" class="min-h-screen">
+
+        <div class="mx-auto min-h-screen bg-white shadow-2xl relative max-w-[640px] md:border-x md:border-rock-200">
+
+            <div v-if="!session" class="flex flex-col items-center justify-center min-h-screen bg-gradient-to-b from-white to-rock-50 p-8">
+                <div class="w-full max-w-sm">
+                    <div class="mb-10 text-center">
+                        <div class="w-16 h-16 bg-rock-900 rounded-2xl mx-auto flex items-center justify-center mb-4 shadow-xl">
+                            <i class="fas fa-cube text-white text-2xl"></i>
+                        </div>
+                        <h1 class="text-2xl font-bold text-rock-900">微岩石 CRM</h1>
+                        <p class="text-gray-400 text-xs mt-2">v1.4 智能增强版</p>
+                    </div>
+                    <div class="space-y-5">
+                        <input v-model="loginForm.email" type="email" placeholder="邮箱账号" class="w-full px-4 py-3.5 bg-white border border-gray-200 rounded-xl focus:border-rock-900 outline-none transition">
+                        <input v-model="loginForm.password" type="password" placeholder="密码" class="w-full px-4 py-3.5 bg-white border border-gray-200 rounded-xl focus:border-rock-900 outline-none transition">
+                        <div class="flex items-center cursor-pointer" @click="loginForm.remember = !loginForm.remember">
+                            <div class="w-5 h-5 border rounded flex items-center justify-center transition" :class="loginForm.remember ? 'bg-rock-900 border-rock-900' : 'border-gray-300 bg-white'">
+                                <i v-if="loginForm.remember" class="fas fa-check text-white text-xs"></i>
+                            </div>
+                            <span class="ml-2 text-sm text-gray-500">记住账号</span>
+                        </div>
+                        <button @click="handleLogin" :disabled="loading" class="w-full bg-rock-900 text-white py-3.5 rounded-xl font-bold shadow-lg hover:bg-black active:scale-[0.98] transition-all">
+                            {{ loading ? '登录中...' : '登 录' }}
+                        </button>
+                        <div v-if="loginError" class="text-red-500 text-xs text-center mt-2">{{ loginError }}</div>
+                    </div>
+                </div>
+            </div>
+
+            <div v-else-if="currentView === 'dashboard'">
+                <div class="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+                    <div class="font-bold text-lg text-rock-900 flex items-center">
+                        <span class="w-2 h-2 bg-gold-500 rounded-full mr-2"></span>
+                        工作台
+                    </div>
+                    <div class="flex space-x-1">
+                        <button @click="showSearch = !showSearch" class="w-9 h-9 rounded-full hover:bg-gray-100 flex items-center justify-center transition text-gray-600"><i class="fas fa-search"></i></button>
+                        <button @click="showMenu = true" class="w-9 h-9 rounded-full hover:bg-gray-100 flex items-center justify-center transition text-gray-600"><i class="fas fa-bars"></i></button>
+                    </div>
+                </div>
+
+                <transition name="fade">
+                    <div v-if="showSearch" class="px-5 py-3 bg-white border-b border-gray-100">
+                        <input v-model="searchQuery" placeholder="搜索姓名、手机..." class="w-full bg-gray-50 pl-4 pr-4 py-2.5 rounded-lg text-sm outline-none focus:ring-2 focus:ring-gray-200">
+                    </div>
+                </transition>
+
+                <div class="p-5 pb-24 space-y-6">
+
+                    <div v-if="!searchQuery" class="grid grid-cols-3 gap-3">
+                        <div class="bg-gray-50 p-3 rounded-xl border border-gray-100 flex flex-col items-center justify-center">
+                            <span class="text-xl font-bold text-rock-900">{{ customers.length }}</span>
+                            <span class="text-[10px] text-gray-400 font-medium">总客户</span>
+                        </div>
+                        <div class="bg-yellow-50 p-3 rounded-xl border border-yellow-100 flex flex-col items-center justify-center">
+                            <span class="text-xl font-bold text-gold-500">{{ vipCount }}</span>
+                            <span class="text-[10px] text-yellow-600 font-medium">VIP客户</span>
+                        </div>
+                        <div class="bg-red-50 p-3 rounded-xl border border-red-100 flex flex-col items-center justify-center">
+                            <span class="text-xl font-bold text-red-500">{{ overdueCount }}</span>
+                            <span class="text-[10px] text-red-400 font-medium">需跟进</span>
+                        </div>
+                    </div>
+
+                    <div v-if="vipCustomers.length > 0 && !searchQuery">
+                        <div @click="isVipExpanded = !isVipExpanded" class="flex items-center justify-between mb-3 cursor-pointer">
+                            <div class="flex items-center">
+                                <span class="text-sm font-bold text-gray-800 mr-2">今日重点</span>
+                                <span class="bg-gold-50 text-gold-500 text-xs font-bold px-2 py-0.5 rounded-full">{{ vipCustomers.length }}</span>
+                            </div>
+                            <i class="fas fa-chevron-down text-gray-400 transition-transform duration-300" :class="isVipExpanded ? 'rotate-180' : ''"></i>
+                        </div>
+                        <transition name="fade">
+                            <div v-if="isVipExpanded" class="grid grid-cols-1 gap-3">
+                                <div v-for="c in vipCustomers" :key="c.id" @click="openCustomer(c)" class="relative bg-gradient-to-br from-yellow-50 to-white border border-yellow-200 rounded-xl p-4 shadow-sm active:scale-[0.98] transition cursor-pointer">
+                                    <div class="absolute top-0 right-0 px-2 py-1 bg-yellow-400 text-white text-[10px] rounded-bl-lg font-bold">VIP</div>
+                                    <div class="font-bold text-gray-900 text-lg mb-1">{{ c.name }}</div>
+                                    <div class="flex items-center text-xs text-gray-500 space-x-2">
+                                        <span><i class="fas fa-clock mr-1 text-gray-400"></i>{{ formatDate(c.next_followup_date) }}</span>
+                                        <span v-if="c.next_action" class="bg-white border border-yellow-200 text-yellow-700 px-1.5 py-0.5 rounded">{{ c.next_action }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </transition>
+                    </div>
+
+                    <div>
+                        <div class="flex items-center justify-between mb-4">
+                            <span class="text-sm font-bold text-gray-800">客户名单</span>
+                        </div>
+
+                        <div class="bg-gray-100 p-1 rounded-xl flex mb-4 overflow-x-auto hide-scrollbar">
+                            <template v-if="viewMode === 'status'">
+                                <button v-for="tab in statusTabs" :key="tab" @click="currentTab = tab; resetPagination()" 
+                                    :class="currentTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'"
+                                    class="flex-1 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap px-2">{{ tab }}</button>
+                            </template>
+                            <template v-else>
+                                <button v-for="tab in levelTabs" :key="tab" @click="currentTab = tab; resetPagination()" 
+                                    :class="currentTab === tab ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-400'"
+                                    class="flex-1 py-2 rounded-lg text-xs font-bold transition-all whitespace-nowrap px-2">{{ tab }}</button>
+                            </template>
+                        </div>
+
+                        <div class="space-y-3 min-h-[300px]">
+                            <div v-for="c in paginatedList" :key="c.id" @click="openCustomer(c)" 
+                                class="bg-white rounded-xl p-4 border border-gray-100 shadow-sm active:bg-gray-50 transition cursor-pointer">
+                                <div class="flex justify-between items-start">
+                                    <div class="flex-1">
+                                        <div class="flex items-center space-x-2 mb-1">
+                                            <span class="font-bold text-gray-900">{{ c.name }}</span>
+                                            <span v-if="isDormant(c)" class="text-[10px] bg-gray-100 text-gray-400 px-1.5 rounded"><i class="fas fa-bed mr-1"></i>沉睡</span>
+                                            <span v-else-if="viewMode === 'status'" class="text-[10px] border px-1.5 rounded" :class="getLevelColor(c.level)">{{ c.level }}</span>
+                                            <span v-else class="text-[10px] border px-1.5 rounded text-gray-500">{{ c.status }}</span>
+                                        </div>
+                                        <div class="text-xs text-gray-500 flex flex-wrap gap-2 mt-1">
+                                            <span class="bg-gray-50 px-1.5 py-0.5 rounded">{{ c.handler }}</span>
+                                            <span v-if="c.province" class="text-gray-400">| {{ c.province }}</span>
+                                        </div>
+                                        <div v-if="c.next_action" class="text-xs text-rock-800 mt-2 font-medium">→ {{ c.next_action }}</div>
+                                    </div>
+                                    <a :href="'tel:' + c.phone" @click.stop class="w-9 h-9 rounded-full bg-gray-50 flex items-center justify-center text-gray-400 hover:bg-green-500 hover:text-white transition ml-2">
+                                        <i class="fas fa-phone text-xs"></i>
+                                    </a>
+                                </div>
+                            </div>
+                            <div v-if="filteredListCustomers.length === 0" class="flex flex-col items-center justify-center py-10 text-gray-300">
+                                <i class="far fa-folder-open text-3xl mb-3 opacity-30"></i><span class="text-xs">暂无数据</span>
+                            </div>
+                            <div v-if="hasMoreData" class="pt-4">
+                                <button @click="loadMore" class="w-full py-3 bg-gray-50 text-gray-500 text-xs font-bold rounded-xl hover:bg-gray-100 transition">
+                                    显示更多 ({{ displayedCount }} / {{ filteredListCustomers.length }}) <i class="fas fa-chevron-down ml-1"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <button @click="openAddForm" class="absolute bottom-8 right-6 bg-rock-900 text-white w-14 h-14 rounded-2xl shadow-xl flex items-center justify-center text-xl hover:scale-105 active:scale-95 transition-all z-30"><i class="fas fa-plus"></i></button>
+            </div>
+
+            <transition name="fade">
+                <div v-if="showMenu" class="fixed inset-0 z-50 flex">
+                    <div @click="showMenu = false" class="bg-black/30 backdrop-blur-sm flex-1"></div>
+                    <div class="bg-white w-72 h-full shadow-2xl flex flex-col">
+                        <div class="p-6 bg-rock-900 text-white">
+                            <h2 class="text-lg font-bold">功能菜单</h2>
+                            <p class="text-xs text-gray-400 mt-1">账号: {{ currentUserEmail }}</p>
+                        </div>
+                        <div class="flex-1 p-4 space-y-2 overflow-y-auto">
+                            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2 mt-2">视图设置</div>
+                            <button @click="viewMode = 'status'; currentTab='持续跟进'; showMenu = false" class="flex items-center w-full px-4 py-3 text-sm font-medium rounded-lg transition" :class="viewMode === 'status' ? 'bg-rock-50 text-rock-900' : 'text-gray-600 hover:bg-gray-50'"><i class="fas fa-list-ul w-6 text-center mr-2"></i> 按跟进状态查看</button>
+                            <button @click="viewMode = 'level'; currentTab='重点跟进'; showMenu = false" class="flex items-center w-full px-4 py-3 text-sm font-medium rounded-lg transition" :class="viewMode === 'level' ? 'bg-rock-50 text-rock-900' : 'text-gray-600 hover:bg-gray-50'"><i class="fas fa-layer-group w-6 text-center mr-2"></i> 按客户等级查看</button>
+                            <div class="h-px bg-gray-100 my-4"></div>
+                            <div class="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">数据管理</div>
+                            <button @click="currentView = 'trash'; showMenu = false" class="flex items-center w-full px-4 py-3 text-sm font-medium text-gray-600 rounded-lg hover:bg-gray-50 transition"><i class="fas fa-trash-alt w-6 text-center mr-2"></i> 回收站</button>
+                        </div>
+                        <div class="p-4 border-t border-gray-100">
+                            <button @click="logout" class="flex items-center w-full px-4 py-3 text-sm font-bold text-red-500 rounded-lg hover:bg-red-50 transition"><i class="fas fa-sign-out-alt w-6 text-center mr-2"></i> 退出登录</button>
+                        </div>
+                    </div>
+                </div>
+            </transition>
+
+            <div v-else-if="currentView === 'trash'" class="bg-white min-h-screen">
+                <div class="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center z-10">
+                    <button @click="currentView = 'dashboard'" class="text-gray-500 hover:text-black transition"><i class="fas fa-arrow-left"></i></button>
+                    <div class="ml-4 font-bold text-lg">回收站</div>
+                </div>
+                <div class="p-5 space-y-3">
+                    <div v-if="trashCustomers.length === 0" class="text-center text-gray-400 mt-10">空空如也</div>
+                    <div v-for="c in trashCustomers" :key="c.id" class="flex justify-between items-center p-4 border border-gray-100 rounded-xl bg-gray-50">
+                        <div><div class="font-bold text-gray-500 line-through text-sm">{{ c.name }}</div><div class="text-xs text-gray-400 mt-1">已删除</div></div>
+                        <button @click="restoreCustomer(c)" class="text-xs font-bold bg-white border border-gray-200 px-3 py-1.5 rounded-lg text-blue-600">恢复</button>
+                    </div>
+                </div>
+            </div>
+
+            <transition name="slide-up">
+            <div v-if="currentView === 'form'" class="fixed inset-0 z-50 bg-white flex flex-col">
+                <div class="px-5 py-4 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0 z-10">
+                    <button @click="currentView = 'dashboard'" class="text-sm font-medium text-gray-500">取消</button>
+                    <div class="font-bold text-gray-900">{{ isEditing ? '编辑资料' : '新增客户' }}</div>
+                    <button @click="saveCustomer" class="text-sm font-bold text-white bg-rock-900 px-4 py-1.5 rounded-lg shadow-md">保存</button>
+                </div>
+
+                <div class="flex-1 overflow-y-auto p-6 space-y-8 bg-white pb-20">
+                    <section class="space-y-4">
+                        <label class="block text-xs font-bold text-gray-400">客户姓名</label>
+                        <input v-model="formData.name" class="w-full text-xl font-bold border-b border-gray-200 pb-2 outline-none focus:border-black transition placeholder-gray-300" placeholder="请输入姓名">
+                    </section>
+
+                    <section class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 mb-3">客户等级</label>
+                            <div class="flex flex-wrap gap-2">
+                                <button v-for="opt in ['重点跟进', '培养', '意向不大']" :key="opt" @click="formData.level = opt" class="px-4 py-2 rounded-lg text-xs font-bold border transition" :class="formData.level === opt ? 'bg-rock-900 text-white border-rock-900' : 'bg-gray-50 text-gray-600 border-transparent'">{{ opt }}</button>
+                            </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 mb-3">跟进状态</label>
+                            <div class="flex flex-wrap gap-2">
+                                <button v-for="opt in ['持续跟进', '暂停跟进', '结束客户']" :key="opt" @click="formData.status = opt" class="px-4 py-2 rounded-lg text-xs font-bold border transition" :class="formData.status === opt ? 'bg-rock-900 text-white border-rock-900' : 'bg-gray-50 text-gray-600 border-transparent'">{{ opt }}</button>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="bg-gray-50 p-4 rounded-xl space-y-4 border border-gray-100">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 mb-2">下次跟进</label>
+                            <div class="flex gap-2 mb-2">
+                                <button @click="setNextDate(1)" class="px-2 py-1 bg-white border text-[10px] rounded hover:border-blue-500">+1天</button>
+                                <button @click="setNextDate(3)" class="px-2 py-1 bg-white border text-[10px] rounded hover:border-blue-500">+3天</button>
+                                <button @click="setNextDate(7)" class="px-2 py-1 bg-white border text-[10px] rounded hover:border-blue-500">+1周</button>
+                            </div>
+                            <input v-model="formData.next_followup_date" type="date" class="w-full bg-white rounded-lg p-3 text-sm outline-none">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-500 mb-2">动作</label>
+                            <div class="flex flex-wrap gap-2 mb-2">
+                                <button v-for="act in ['寄样板', '报价', '画图', '回访']" :key="act" @click="formData.next_action = act" class="px-3 py-1 rounded-md text-[10px] bg-white border border-gray-200 text-gray-600 hover:border-gray-400">{{ act }}</button>
+                            </div>
+                            <input v-model="formData.next_action" placeholder="或手动输入..." class="w-full bg-white rounded-lg p-3 text-sm outline-none">
+                        </div>
+                    </section>
+
+                    <section class="space-y-4">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">手机号码</label>
+                            <input v-model="formData.phone" type="tel" class="w-full bg-gray-50 rounded-lg p-3 text-sm outline-none" placeholder="输入手机号">
+                        </div>
+                        <div>
+                            <div class="flex justify-between mb-2">
+                                <label class="block text-xs font-bold text-gray-400">客户地址</label>
+                                <div class="flex gap-2">
+                                    <button @click="copyForWeChat" class="text-[10px] font-bold text-green-600 bg-green-50 px-2 py-0.5 rounded border border-green-200"><i class="fab fa-weixin mr-1"></i>复制发货语</button>
+                                    <button @click="copyAddress" class="text-[10px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded border border-blue-200">复制地址</button>
+                                </div>
+                            </div>
+                            <div class="space-y-2">
+                                <select v-model="formData.province" class="w-full bg-gray-50 rounded-lg p-3 text-sm outline-none appearance-none"><option value="" disabled>选择省份/区域</option><option v-for="p in provinceOptions" :key="p" :value="p">{{p}}</option></select>
+                                <textarea v-model="formData.address" rows="2" class="w-full bg-gray-50 rounded-lg p-3 text-sm outline-none" placeholder="详细地址"></textarea>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="space-y-4 pt-4 border-t border-gray-100">
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">经手人</label>
+                            <div class="flex gap-2"><button v-for="h in ['志鹏', '亨']" :key="h" @click="formData.handler = h" class="flex-1 py-2 rounded-lg text-xs font-bold border transition" :class="formData.handler === h ? 'bg-gray-800 text-white' : 'bg-gray-50 text-gray-600'">{{ h }}</button></div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">渠道来源</label>
+                            <select v-model="formData.source" class="w-full bg-gray-50 rounded-lg p-3 text-sm outline-none"><option value="" disabled>请选择</option><option v-for="s in sourceOptions" :key="s" :value="s">{{s}}</option></select>
+                        </div>
+                         <div>
+                            <label class="block text-xs font-bold text-gray-400 mb-2">备注信息</label>
+                            <textarea v-model="formData.notes" rows="4" class="w-full bg-gray-50 rounded-lg p-3 text-sm outline-none"></textarea>
+                        </div>
+                    </section>
+
+                    <div v-if="isEditing" class="pt-6">
+                        <button @click="deleteCustomer" class="w-full py-3 rounded-xl text-sm font-bold text-red-500 bg-red-50 hover:bg-red-100 transition">删除此客户</button>
+                    </div>
+                </div>
+            </div>
+            </transition>
+
+        </div>
+    </div>
+
+    <script>
+        const { createClient } = supabase;
+        const supabaseUrl = 'https://ofuxdwsqmnpwwooqpljr.supabase.co'; 
+        const supabaseKey = 'sb_publishable_rbn1Kjz6N6v8t-2OXw6arQ_QggOXOKj';
+        const _supabase = createClient(supabaseUrl, supabaseKey);
+
+        const app = Vue.createApp({
+            data() {
+                return {
+                    session: null, loading: false, loginError: '', 
+                    currentView: 'dashboard', showSearch: false, showMenu: false, searchQuery: '',
+                    loginForm: { email: '', password: '', remember: true },
+                    isVipExpanded: true, 
+                    viewMode: 'status', 
+                    currentTab: '持续跟进',
+                    statusTabs: ['持续跟进', '暂停跟进', '结束客户'],
+                    levelTabs: ['重点跟进', '培养', '意向不大'],
+                    pageSize: 10, currentPage: 1,
+                    customers: [], isEditing: false, formData: {},
+                    provinceOptions: ["广东", "上海", "北京", "浙江", "江苏", "四川", "福建", "山东", "湖北", "湖南", "河南", "河北", "重庆", "陕西", "天津", "江西", "广西", "安徽", "海外", "其他"],
+                    sourceOptions: ["小红书", "抖音", "闲鱼", "朋友介绍", "展会", "官网", "陌拜", "老客户推荐", "设计师渠道"]
+                }
+            },
+            computed: {
+                currentUserEmail() { return this.session?.user?.email || '未知用户'; },
+                activeCustomers() { return this.customers.filter(c => !c.is_deleted); },
+                trashCustomers() { return this.customers.filter(c => c.is_deleted); },
+                vipCustomers() {
+                    if (this.searchQuery) return [];
+                    const today = new Date().toISOString().split('T')[0];
+                    return this.activeCustomers.filter(c => c.level === '重点跟进' && c.status === '持续跟进' && c.next_followup_date && c.next_followup_date <= today).sort((a,b) => a.next_followup_date.localeCompare(b.next_followup_date));
+                },
+                vipCount() { return this.activeCustomers.filter(c => c.level === '重点跟进').length; },
+                overdueCount() { 
+                    const today = new Date().toISOString().split('T')[0];
+                    return this.activeCustomers.filter(c => c.status === '持续跟进' && c.next_followup_date && c.next_followup_date < today).length; 
+                },
+                filteredListCustomers() {
+                    let list = this.activeCustomers;
+                    if (this.searchQuery) {
+                        const q = this.searchQuery.toLowerCase();
+                        return list.filter(c => (c.name && c.name.toLowerCase().includes(q)) || (c.phone && c.phone.includes(q)) || (c.province && c.province.includes(q)));
+                    }
+                    if (this.viewMode === 'status') return list.filter(c => c.status === this.currentTab);
+                    else return list.filter(c => c.level === this.currentTab);
+                },
+                paginatedList() {
+                    if (this.searchQuery) return this.filteredListCustomers;
+                    return this.filteredListCustomers.slice(0, this.currentPage * this.pageSize);
+                },
+                displayedCount() { return this.paginatedList.length; },
+                hasMoreData() { return this.displayedCount < this.filteredListCustomers.length; }
+            },
+            async mounted() {
+                const savedEmail = localStorage.getItem('crm_saved_email');
+                if (savedEmail) this.loginForm.email = savedEmail;
+                const { data } = await _supabase.auth.getSession();
+                this.session = data.session;
+                if (this.session) this.fetchCustomers();
+            },
+            methods: {
+                loadMore() { this.currentPage++; },
+                resetPagination() { this.currentPage = 1; },
+                async handleLogin() {
+                    this.loading = true; this.loginError = '';
+                    const { data, error } = await _supabase.auth.signInWithPassword({ email: this.loginForm.email, password: this.loginForm.password });
+                    if (error) this.loginError = "登录失败: " + error.message; 
+                    else {
+                        this.session = data.session;
+                        if (this.loginForm.remember) localStorage.setItem('crm_saved_email', this.loginForm.email);
+                        else localStorage.removeItem('crm_saved_email');
+                        this.fetchCustomers();
+                    }
+                    this.loading = false;
+                },
+                async logout() { await _supabase.auth.signOut(); this.session = null; this.showMenu = false; },
+                async fetchCustomers() {
+                    const { data, error } = await _supabase.from('customers').select('*').order('created_at', { ascending: false });
+                    if (error) alert("获取数据失败: " + error.message);
+                    else this.customers = data;
+                },
+                openAddForm() {
+                    this.isEditing = false;
+                    const isHeng = this.currentUserEmail.includes('158402600');
+                    this.formData = { status: '持续跟进', level: '培养', country: '中国', handler: isHeng ? '亨' : '志鹏', next_followup_date: new Date().toISOString().split('T')[0], province: '', source: '' };
+                    this.currentView = 'form';
+                },
+                openCustomer(c) { this.isEditing = true; this.formData = { ...c }; this.currentView = 'form'; },
+                async saveCustomer() {
+                    if (!this.formData.name) return alert('请输入客户姓名');
+                    const payload = { ...this.formData };
+                    delete payload.id;
+                    if (this.isEditing) payload.id = this.formData.id;
+                    const { data, error } = await _supabase.from('customers').upsert(payload).select();
+                    if (error) alert('保存失败:' + error.message);
+                    else { await this.fetchCustomers(); this.currentView = 'dashboard'; }
+                },
+                async deleteCustomer() {
+                    if(!confirm('确定要删除放入回收站吗？')) return;
+                    const { error } = await _supabase.from('customers').update({ is_deleted: true }).eq('id', this.formData.id);
+                    if (!error) { this.fetchCustomers(); this.currentView = 'dashboard'; }
+                },
+                async restoreCustomer(c) {
+                    if(!confirm('确定要恢复这位客户吗？')) return;
+                    const { error } = await _supabase.from('customers').update({ is_deleted: false }).eq('id', c.id);
+                    if (!error) this.fetchCustomers(); 
+                },
+                copyAddress() {
+                    const fullAddr = (this.formData.province || '') + (this.formData.address || '');
+                    if (!fullAddr) return;
+                    navigator.clipboard.writeText(fullAddr).then(() => alert('地址已复制'));
+                },
+                copyForWeChat() {
+                    const text = `客户：${this.formData.name}\n电话：${this.formData.phone}\n地址：${this.formData.province || ''}${this.formData.address || ''}\n动作：${this.formData.next_action || '寄样板'}`;
+                    navigator.clipboard.writeText(text).then(() => alert('微信通知话术已复制！'));
+                },
+                setNextDate(days) {
+                    const date = new Date();
+                    date.setDate(date.getDate() + days);
+                    this.formData.next_followup_date = date.toISOString().split('T')[0];
+                },
+                isDormant(c) {
+                    if (!c.next_followup_date || c.status !== '持续跟进') return false;
+                    const lastDate = new Date(c.next_followup_date);
+                    const today = new Date();
+                    const diffTime = Math.abs(today - lastDate);
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                    return diffDays > 30; // 超过30天算沉睡
+                },
+                formatDate(dateStr) {
+                    if (!dateStr) return '';
+                    const d = new Date(dateStr);
+                    return `${d.getMonth()+1}月${d.getDate()}日`;
+                },
+                getLevelColor(level) {
+                    if (level === '重点跟进') return 'text-red-600 border-red-200 bg-red-50';
+                    if (level === '意向不大') return 'text-gray-400 border-gray-200 bg-gray-50';
+                    return 'text-blue-600 border-blue-200 bg-blue-50';
+                }
+            }
+        });
+        app.mount('#app');
+    </script>
+</body>
+</html>
