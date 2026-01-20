@@ -17,10 +17,10 @@
                     colors: {
                         rock: { 50: '#fafaf9', 100: '#f5f5f4', 200: '#e7e5e4', 800: '#292524', 900: '#1c1917' },
                         gold: { 500: '#d97706', 50: '#fffbeb' },
-                        success: { 50: '#ecfdf5', 600: '#059669' } // 新增成功色
+                        success: { 50: '#ecfdf5', 600: '#059669' }
                     },
                     boxShadow: {
-                        'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)', // 更柔和的阴影
+                        'soft': '0 4px 20px -2px rgba(0, 0, 0, 0.05)',
                     }
                 }
             }
@@ -32,7 +32,7 @@
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .fade-enter-active, .fade-leave-active { transition: opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
         .fade-enter-from, .fade-leave-to { opacity: 0; }
-        .slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); } /* iOS物理曲线 */
+        .slide-up-enter-active, .slide-up-leave-active { transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
         .slide-up-enter-from, .slide-up-leave-to { transform: translateY(100%); }
     </style>
 </head>
@@ -106,7 +106,9 @@
                     </div>
                 </transition>
 
-                <div class="p-5 pb-28 space-y-8"> <div v-if="!searchQuery" class="grid grid-cols-3 gap-4">
+                <div class="p-5 pb-28 space-y-8">
+
+                    <div v-if="!searchQuery" class="grid grid-cols-3 gap-4">
                         <div class="bg-white p-4 rounded-2xl border border-gray-100 shadow-soft flex flex-col items-center justify-center hover:border-gray-200 transition duration-300">
                             <span class="text-2xl font-bold text-rock-900">{{ customers.length }}</span>
                             <span class="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mt-1">总客户</span>
@@ -137,7 +139,6 @@
                             <div v-if="isVipExpanded" class="grid grid-cols-1 gap-3">
                                 <div v-for="c in vipCustomers" :key="c.id" @click="openCustomer(c)" class="relative bg-white border border-yellow-100 rounded-2xl p-5 shadow-soft hover:shadow-md active:scale-[0.98] transition-all cursor-pointer group">
                                     <div class="absolute top-0 right-0 w-12 h-12 bg-gradient-to-br from-yellow-50 to-white rounded-bl-3xl -mr-2 -mt-2"></div>
-                                    
                                     <div class="absolute top-4 right-4 text-gold-500"><i class="fas fa-star text-xs"></i></div>
                                     <div class="font-bold text-rock-900 text-lg mb-1 relative z-10">{{ c.name }}</div>
                                     <div class="flex items-center text-xs text-gray-500 space-x-3 relative z-10">
@@ -386,7 +387,6 @@
                     isVipExpanded: true, 
                     viewMode: 'status', 
                     currentTab: '持续跟进',
-                    // 优化2: 增加 '已做项目'
                     statusTabs: ['持续跟进', '已做项目', '暂停跟进', '结束客户'],
                     levelTabs: ['重点跟进', '培养', '意向不大'],
                     pageSize: 10, currentPage: 1,
@@ -410,15 +410,54 @@
                     const today = new Date().toISOString().split('T')[0];
                     return this.activeCustomers.filter(c => c.status === '持续跟进' && c.next_followup_date && c.next_followup_date < today).length; 
                 },
+                
+                // --- 核心优化：智能排序逻辑 ---
                 filteredListCustomers() {
                     let list = this.activeCustomers;
+                    
+                    // 1. 搜索优先
                     if (this.searchQuery) {
                         const q = this.searchQuery.toLowerCase();
                         return list.filter(c => (c.name && c.name.toLowerCase().includes(q)) || (c.phone && c.phone.includes(q)) || (c.province && c.province.includes(q)));
                     }
-                    if (this.viewMode === 'status') return list.filter(c => c.status === this.currentTab);
-                    else return list.filter(c => c.level === this.currentTab);
+
+                    // 2. 根据视图模式初步过滤
+                    let result = [];
+                    if (this.viewMode === 'status') {
+                        result = list.filter(c => c.status === this.currentTab);
+                    } else {
+                        result = list.filter(c => c.level === this.currentTab);
+                    }
+
+                    // 3. 执行智能排序
+                    result.sort((a, b) => {
+                        // 逻辑 1: 如果是“按状态看”且在“持续跟进”列表，把“重点跟进”的客户排最前面
+                        if (this.viewMode === 'status' && this.currentTab === '持续跟进') {
+                            const levelA = (a.level === '重点跟进') ? 1 : 0;
+                            const levelB = (b.level === '重点跟进') ? 1 : 0;
+                            if (levelA !== levelB) return levelB - levelA; // 重点优先
+                        }
+
+                        // 逻辑 2: 如果是“按等级看”，把“持续跟进”的客户排最前面（因为这些才是活越的）
+                        if (this.viewMode === 'level') {
+                            const statusA = (a.status === '持续跟进') ? 1 : 0;
+                            const statusB = (b.status === '持续跟进') ? 1 : 0;
+                            if (statusA !== statusB) return statusB - statusA; // 活跃优先
+                        }
+
+                        // 辅助逻辑: 按时间排序 (越急越前)
+                        if (a.next_followup_date && b.next_followup_date) {
+                            return a.next_followup_date.localeCompare(b.next_followup_date);
+                        }
+                        
+                        // 辅助逻辑: 按创建时间 (最新优先)
+                        return new Date(b.created_at) - new Date(a.created_at);
+                    });
+
+                    return result;
                 },
+                // -----------------------------
+
                 paginatedList() {
                     if (this.searchQuery) return this.filteredListCustomers;
                     return this.filteredListCustomers.slice(0, this.currentPage * this.pageSize);
@@ -529,7 +568,6 @@
                     if (level === '意向不大') return 'text-gray-400 border-gray-200 bg-gray-50';
                     return 'text-blue-600 border-blue-200 bg-blue-50';
                 },
-                // 优化2: 状态颜色处理
                 getStatusColor(status) {
                     if (status === '已做项目') return 'text-success-600 border-green-200 bg-success-50';
                     if (status === '暂停跟进') return 'text-gray-400 border-gray-200 bg-gray-50';
